@@ -28,7 +28,7 @@ def login():
 
     valid_users = {
         os.getenv('ADMIN_USER'): os.getenv('ADMIN_PASS'),
-        os.getenv('SALES_USER'): os.getenv('SALES_PASS'),os.getenv('MD_USER'): os.getenv('MD_PASS')
+        os.getenv('TEST_USER'): os.getenv('TEST_PASS'),os.getenv('MD_USER'): os.getenv('MD_PASS')
     }
 
     if username in valid_users and password == valid_users[username]:
