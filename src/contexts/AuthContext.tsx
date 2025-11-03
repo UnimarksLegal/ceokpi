@@ -8,22 +8,39 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  login: async () => ({ success: false }),
+  logout: () => {},
+});
+
+const EXPIRY_HOURS = 48; // 🔹 2 days
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  // Restore user on reload
+  // ✅ Restore session if still valid
   useEffect(() => {
-    const savedUser = localStorage.getItem("authUser");
-    if (savedUser) setUser(JSON.parse(savedUser));
+    const storedUser = localStorage.getItem("user");
+    const storedTime = localStorage.getItem("login_time");
+    if (storedUser && storedTime) {
+      const now = Date.now();
+      const loginTime = parseInt(storedTime);
+      const diffHours = (now - loginTime) / (1000 * 60 * 60);
+      if (diffHours < EXPIRY_HOURS) {
+        setUser(JSON.parse(storedUser));
+      } else {
+        localStorage.removeItem("user");
+        localStorage.removeItem("login_time");
+      }
+    }
   }, []);
 
+  // ✅ Login function (using your backend check)
   const login = async (username: string, password: string) => {
     try {
       const res = await fetch(`${API_BASE}/api/login`, {
@@ -34,33 +51,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await res.json();
 
-      if (data.success) {
-        const loggedUser = { username: data.user };
-        setUser(loggedUser);
-        localStorage.setItem("authUser", JSON.stringify(loggedUser));
+      if (res.ok && data.success) {
+        setUser({ username });
+        localStorage.setItem("user", JSON.stringify({ username }));
+        localStorage.setItem("login_time", Date.now().toString());
         return { success: true };
       } else {
-        return { success: false, error: data.error };
+        return { success: false, error: data.error || "Invalid credentials" };
       }
     } catch (err) {
-      return { success: false, error: "Server unreachable" };
+      console.error("Login error:", err);
+      return { success: false, error: "Network error" };
     }
   };
 
+  // ✅ Logout
   const logout = () => {
     setUser(null);
-    localStorage.removeItem("authUser");
+    localStorage.removeItem("user");
+    localStorage.removeItem("login_time");
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within an AuthProvider");
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);
